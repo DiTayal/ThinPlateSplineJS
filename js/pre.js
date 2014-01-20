@@ -4,18 +4,15 @@ function ThinPlateSpline(options) {
   if (!options) { options = {}; }
 
   this.__ord = {
-    pointer : Runtime.stackAlloc(104),
+    pointer : new Module._TPS(2),
     solved  : false
   };
   this.__rev = {
-    pointer : Runtime.stackAlloc(104),
+    pointer : new Module._TPS(2),
     solved  : false
   };
   this.isWorker = false;
   var me     = this;
-
-  Module['ccall']('_ZN17VizGeorefSpline2DC2Ei', 'void', ['number', 'number'], [this.__ord.pointer, 2]);
-  Module['ccall']('_ZN17VizGeorefSpline2DC2Ei', 'void', ['number', 'number'], [this.__rev.pointer, 2]);
 
   if (options.use_worker) {
     var root = '';
@@ -68,10 +65,10 @@ function ThinPlateSpline(options) {
 }
 
 ThinPlateSpline.prototype.destructor = function() {
-  Module['ccall']('_ZN17VizGeorefSpline2DD2Ev', 'void', ['number'], [this.__ord.pointer]);
-  Module['ccall']('_ZN17VizGeorefSpline2DD2Ev', 'void', ['number'], [this.__rev.pointer]);
-  Module['ccall']('_ZdlPv', 'void', ['number'], [this.__ord.pointer]);
-  Module['ccall']('_ZdlPv', 'void', ['number'], [this.__rev.pointer]);
+  this.__ord.pointer.delete();
+  this.__ord.pointer = null;
+  this.__rev.pointer.delete();
+  this.__rev.pointer = null;
 };
 
 ThinPlateSpline.prototype.push_points = function(points) {
@@ -136,7 +133,8 @@ ThinPlateSpline.prototype.__add_point = function(self, P, D) {
   var DPtr = _malloc(16);
   Module.setValue(DPtr,     D[0], 'double');
   Module.setValue(DPtr + 8, D[1], 'double');
-  var ret = Module['ccall']('_ZN17VizGeorefSpline2D9add_pointEddPKd', 'number', ['number','number','number','number'], [self.pointer, P[0], P[1], DPtr]);
+
+  var ret = self.pointer.add_point(P[0], P[1], DPtr);
 
   _free(DPtr);
 
@@ -152,7 +150,7 @@ ThinPlateSpline.prototype.solve = function() {
 
 ThinPlateSpline.prototype.__solve = function(self) {
   self.solved = true;
-  return Module['ccall']('_ZN17VizGeorefSpline2D5solveEv', 'number', ['number'], [self.pointer]);
+  return self.pointer.solve();
 };
 
 ThinPlateSpline.prototype.transform = function(P, isRev) {
@@ -189,13 +187,15 @@ ThinPlateSpline.prototype.transform = function(P, isRev) {
 ThinPlateSpline.prototype.__get_point = function(self, P) {
   if (!self.solved) { return 0; } //this.__solve(self); }
 
-  var DPtr = _malloc(16);
-  var res  = Module['ccall']('_ZN17VizGeorefSpline2D9get_pointEddPd', 'number', ['number','number','number','number'], [self.pointer, P[0], P[1], DPtr]);
+  var DPtr = Module._malloc(16);
+  var x    = P[0];
+  var y    = P[1];
+  var res  = self.pointer.get_point(x, y, DPtr);
   var ret  = [];
   ret[0]   = Module.getValue(DPtr,    'double');
   ret[1]   = Module.getValue(DPtr + 8,'double');
 
-  _free(DPtr);
+  Module._free(DPtr);
 
   return ret;
 };
@@ -206,11 +206,11 @@ ThinPlateSpline.prototype.serialize = function() {
   var serial_ptr = _malloc(all_size);
   var work_ptr   = serial_ptr;
 
-  work_ptr = Module['ccall']('_ZN17VizGeorefSpline2D9serializeEPc', 'void', ['number', 'number'], [this.__ord.pointer, work_ptr]);
+  work_ptr = this.__ord.pointer.serialize(work_ptr);
   Module.setValue(work_ptr, this.__ord.solved ? 1 : 0, 'i8');
   work_ptr++;
 
-  work_ptr = Module['ccall']('_ZN17VizGeorefSpline2D9serializeEPc', 'void', ['number', 'number'], [this.__rev.pointer, work_ptr]);
+  work_ptr = this.__rev.pointer.serialize(work_ptr);
   Module.setValue(work_ptr, this.__rev.solved ? 1 : 0, 'i8');
   work_ptr++;
 
@@ -232,11 +232,11 @@ ThinPlateSpline.prototype.deserialize = function(serial) {
 
     HEAPU8.set(serial, serial_ptr);
 
-    work_ptr = Module['ccall']('_ZN17VizGeorefSpline2D11deserializeEPc', 'void', ['number', 'number'], [this.__ord.pointer, work_ptr]);
+    work_ptr = this.__ord.pointer.deserialize(work_ptr);
     this.__ord.solved = Module.getValue(work_ptr, 'i8') ? true : false;
     work_ptr++;
 
-    work_ptr = Module['ccall']('_ZN17VizGeorefSpline2D11deserializeEPc', 'void', ['number', 'number'], [this.__rev.pointer, work_ptr]);
+    work_ptr = this.__rev.pointer.deserialize(work_ptr);
     this.__rev.solved = Module.getValue(work_ptr, 'i8') ? true : false;
     work_ptr++;
 
@@ -249,5 +249,5 @@ ThinPlateSpline.prototype.serialize_size = function() {
 };
 
 ThinPlateSpline.prototype.__serialize_size = function(self) {
-  return Module['ccall']('_ZN17VizGeorefSpline2D14serialize_sizeEv', 'number', ['number'], [self.pointer]);
+  return self.pointer.serialize_size();
 };
