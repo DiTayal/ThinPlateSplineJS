@@ -500,6 +500,187 @@ public class VizGeorefSpline2D
         return(4);
     }
 
+    public int serialize_size()
+    {
+        int  i_size     = sizeof(int);
+        int  v_size     = sizeof(vizGeorefInterType);
+        int  d_size     = sizeof(double);
+
+        int  alloc_size = i_size * 5 + v_size + d_size * 5;
+        int  p_num      = _max_nof_points + 3;
+        int  is_aa      = 0;
+        alloc_size      = alloc_size + ( i_size * 2 + d_size * ( 3 + VIZGEOREF_MAX_VARS * 2 ) ) * p_num;
+        int  a_num      = _nof_eqs * _nof_eqs;
+        if (_AA != null) {
+            alloc_size  = alloc_size + ( d_size * a_num * 2 );
+        }
+
+        return alloc_size;
+    }
+
+    public unsafe byte[] serialize(byte[] serial)
+    {
+        int  i_size     = sizeof(int);
+        int  v_size     = sizeof(vizGeorefInterType);
+        int  d_size     = sizeof(double);
+        int  alloc_size = serialize_size();
+        int  p_num      = _max_nof_points + 3;
+        int  is_aa      = 0;
+        int  a_num      = _nof_eqs * _nof_eqs;
+        if (_AA != null) {
+            is_aa       = 1;
+        }
+
+        //cout << _nof_vars << endl;
+        //cout << _nof_points << endl;
+        //cout << _max_nof_points << endl;
+        //cout << _nof_eqs << endl;
+
+        fixed (byte *buffer = serial)
+        {
+            byte *work      = buffer;
+            *((int*)(work))                 = _nof_vars;
+            *((int*)(work + i_size))        = _nof_points;
+            *((int*)(work + i_size * 2))    = _max_nof_points;
+            *((int*)(work + i_size * 3))    = _nof_eqs;
+            *((int*)(work + i_size * 4))    = is_aa;
+            work            = work + i_size * 5;
+            *((vizGeorefInterType*)(work))  = type;
+            work            = work + v_size;
+            *((double*)(work))              = _tx;
+            *((double*)(work + d_size))     = _ty;
+            *((double*)(work + d_size * 2)) = _ta;
+            *((double*)(work + d_size * 3)) = _dx;
+            *((double*)(work + d_size * 4)) = _dy;
+            work            = work + d_size * 5;    
+
+            for (int i=0;i<p_num;i++) {
+                *((int*)(work))                 = unused[i];
+                *((int*)(work + i_size))        = index[i];
+                work        = work + i_size * 2;
+
+                *((double*)(work))              = x[i];
+                *((double*)(work + d_size))     = y[i];
+                *((double*)(work + d_size * 2)) = u[i];
+                work        = work + d_size * 3;
+        
+                for (int j=0;j<VIZGEOREF_MAX_VARS;j++) {
+                    *((double*)(work))          = rhs[j][i];
+                    *((double*)(work + d_size)) = coef[j][i];
+                    work        = work + d_size * 2; 
+                }
+            }
+
+            if (is_aa != 0) {
+                for (int i=0;i<a_num;i++) {
+                    *((double*)(work))          = _AA[i];
+                    *((double*)(work + d_size)) = _Ainv[i];
+                    work        = work + d_size * 2; 
+                }
+            }
+        }
+
+        return serial;
+    }
+
+    public unsafe byte[] deserialize(byte[] serial)
+    {
+        int  i_size     = sizeof(int);
+        int  v_size     = sizeof(vizGeorefInterType);
+        int  d_size     = sizeof(double);
+        int  is_aa;
+
+        if ( _AA != null ) {
+            _AA   = null;
+        }
+        if ( _Ainv != null ) {
+            _Ainv = null;
+        }
+        x = null;
+        y = null;
+        u = null;
+        unused = null;
+        index = null;
+        for ( int i = 0; i < VIZGEOREF_MAX_VARS; i++ )
+        {
+            rhs[i] = null;
+            coef[i] = null;
+        }
+
+        fixed (byte* buffer = serial)
+        {
+            byte *work      = buffer;
+            _nof_vars       = *((int*)(work));
+            _nof_points     = *((int*)(work + i_size));
+            _max_nof_points = *((int*)(work + i_size * 2));
+            _nof_eqs        = *((int*)(work + i_size * 3));
+            is_aa           = *((int*)(work + i_size * 4));
+            work            = work + i_size * 5;
+            type            = *((vizGeorefInterType*)(work));
+            work            = work + v_size;
+            _tx             = *((double*)(work));
+            _ty             = *((double*)(work + d_size));
+            _ta             = *((double*)(work + d_size * 2));
+            _dx             = *((double*)(work + d_size * 3));
+            _dy             = *((double*)(work + d_size * 4));
+            work            = work + d_size * 5;
+
+            //cout << _nof_vars << endl;
+            //cout << _nof_points << endl;
+            //cout << _max_nof_points << endl;
+            //cout << _nof_eqs << endl;
+
+            int  alloc_size = i_size * 5 + v_size + d_size * 5;
+            int  p_num      = _max_nof_points + 3;
+            alloc_size      = alloc_size + ( i_size * 2 + d_size * ( 3 + VIZGEOREF_MAX_VARS * 2 ) ) * p_num;
+            int  a_num      = _nof_eqs * _nof_eqs;
+            if (is_aa != 0) {
+                alloc_size  = alloc_size + ( d_size * a_num * 2 );
+            }
+
+            x      = new double[p_num];
+            y      = new double[p_num];
+            u      = new double[p_num];
+            unused = new int[p_num];
+            index  = new int[p_num];
+            for ( int i = 0; i < VIZGEOREF_MAX_VARS; i++ )
+            {
+                rhs[i]  = new double[p_num];
+                coef[i] = new double[p_num];
+            }
+
+            for (int i=0;i<p_num;i++) {
+                unused[i]   = *((int*)(work));
+                index[i]    = *((int*)(work + i_size));
+                work        = work + i_size * 2;
+
+                x[i]        = *((double*)(work));
+                y[i]        = *((double*)(work + d_size));
+                u[i]        = *((double*)(work + d_size * 2));
+                work        = work + d_size * 3;
+        
+                for (int j=0;j<VIZGEOREF_MAX_VARS;j++) {
+                    rhs[j][i]   = *((double*)(work));
+                    coef[j][i]  = *((double*)(work + d_size));
+                    work        = work + d_size * 2; 
+                }
+            }
+
+            if (is_aa != 0) {
+                _AA      = new double[a_num];
+                _Ainv    = new double[a_num];
+
+                for (int i=0;i<a_num;i++) {
+                    _AA[i]      = *((double*)(work));
+                    _Ainv[i]    = *((double*)(work + d_size));
+                    work        = work + d_size * 2; 
+                }
+            }
+        }
+
+        return serial;
+    }
+
     private double base_func( double x1, double y1,
                       double x2, double y2 )
     {

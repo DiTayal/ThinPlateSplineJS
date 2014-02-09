@@ -41,15 +41,14 @@ class Program
                 new double[] {10, 10, 100, 100}
             };
             TPS t = new TPS(points);
-            double[] dst = new double[2];
-            t.transform(4, 5, dst);
+            double[] dst = t.transform(4, 5);
             if (!(dst[0] == 72.5 && dst[1] == 72.5))
             {
                 // TODO:
                 Console.Out.Write("test_init_from_list-1: failed\n");
             }
             t.add(0, 10, 70, 100);
-            t.transform(4, 5, dst);
+            dst = t.transform(4, 5);
             if (!(dst[0] == 72.0 && dst[1] == 75.0))
             {
                 // TODO:
@@ -61,15 +60,14 @@ class Program
             TPS t = new TPS();
             t.add(0, 0, 50, 50);
             t.add(10, 10, 100, 100);
-            double[] dst = new double[2];
-            t.transform(4, 5, dst);
+            double[] dst = t.transform(4, 5);
             if (!(dst[0] == 72.5 && dst[1] == 72.5))
             {
                 // TODO:
                 Console.Out.Write("test_simple-1:failed\n");
             }
             t.add(0, 10, 70, 100);
-            t.transform(4, 5, dst);
+            dst = t.transform(4, 5);
             if (!(dst[0] == 72.0 && dst[1] == 75.0))
             {
                 // TODO:
@@ -81,8 +79,7 @@ class Program
             try
             {
                 TPS t = new TPS();
-                double[] dst = new double[2];
-                t.transform(0, 0, dst);
+                double[] dst = t.transform(0, 0);
                 Console.Out.Write("test_no_points-1:failed\n");
             }
             catch (Exception ex)
@@ -98,8 +95,7 @@ class Program
                 new double[] {0, 10, 70, 100}
             };
             TPS t = TPS.from_control_points(points);
-            double[] dst = new double[2];
-            t.transform(4, 5, dst);
+            double[] dst = t.transform(4, 5);
             if (!(dst[0] == 72.0 && dst[1] == 75.0))
             {
                 // TODO:
@@ -115,12 +111,65 @@ class Program
                 new double[] {0, 10, 70, 100}
             };
             TPS t = TPS.from_control_points(points, true);
-            double[] dst = new double[2];
-            t.transform(72, 75, dst);
+            double[] dst = t.transform(72, 75);
             if (!(dst[0] == 4.0 && dst[1] == 5.0))
             {
                 // TODO:
                 Console.Out.Write("test_from_control_points_list_backwards-1:failed\n");
+            }
+        }
+        // test_tilemapjp
+        {
+            double[][] points =
+            {
+                new double[] {100, 100, 200, 200},
+                new double[] {200, 200, 400, 400},
+                new double[] {150, 150, 320, 350}
+            };
+            TPS tps_f = TPS.from_control_points(points, false);
+            TPS tps_b = TPS.from_control_points(points, true);
+
+            tps_f.solve();
+            tps_b.solve();
+
+            //Forward transform
+            double[] ord = tps_f.transform(160, 160);
+            if (!(ord[0] == 336 && ord[1] == 360))
+            {
+                // TODO:
+                Console.Out.Write("test_tilemapjp-1:failed\n");
+            }
+
+            //Backward transform
+            double[] rev = tps_b.transform(ord[0], ord[1]);
+            if (!(rev[0] == 160 && rev[1] == 160))
+            {
+                // TODO:
+                Console.Out.Write("test_tilemapjp-2:failed\n");
+            }
+
+            //Solving thin-Plate-Spline from many points by scrach takes too many time.
+            //So, there are object-serialization method to store solved instance.
+            byte[] serial_f = tps_f.serialize();
+            byte[] serial_b = tps_b.serialize();
+
+            TPS tps2_f = new TPS();
+            tps2_f.deserialize(serial_f);
+            TPS tps2_b = new TPS();
+            tps2_b.deserialize(serial_b);
+
+            double[] ord2 = tps2_f.transform(160, 160);
+            double[] rev2 = tps2_b.transform(ord2[0], ord2[1]);
+            //Same results with ord, rev
+            if (!(ord[0] == ord2[0] && ord[1] == ord2[1]))
+            {
+                // TODO:
+                Console.Out.Write("test_tilemapjp-3:failed\n");
+            }
+            if (!(rev[0] == rev2[0] && rev[1] == rev2[1]))
+            {
+                // TODO:
+                Console.Out.Write("test_tilemapjp-4:failed\n");
             }
         }
         return;

@@ -112,5 +112,66 @@ int main(int args, char* argv[])
         }
         delete t;
     }
+    // test_tilemapjp
+    {
+        double points[3][4] = {{100, 100, 200, 200}, {200, 200, 400, 400}, {150, 150, 320, 350}};
+        TPS* tps_f = TPS::from_control_points((double*)points, 3, false);
+        TPS* tps_b = TPS::from_control_points((double*)points, 3, true);
+
+        tps_f->solve();
+        tps_b->solve();
+
+        //Forward transform
+        double ord[2];
+        tps_f->transform(160, 160, ord);
+        if (!(ord[0] == 336 && ord[1] == 360))
+        {
+            // TODO:
+            printf("test_tilemapjp-1:failed\n");
+        }
+
+        //Backward transform
+        double rev[2];
+        tps_b->transform(ord[0], ord[1], rev);
+        if (!(rev[0] == 160 && rev[1] == 160))
+        {
+            // TODO:
+            printf("test_tilemapjp-2:failed\n");
+        }
+
+        //Solving thin-Plate-Spline from many points by scrach takes too many time.
+        //So, there are object-serialization method to store solved instance.
+        int serial_size;
+        serial_size = tps_f->serialize_size();
+        char* serial_f = new char[serial_size];
+        tps_f->serialize(serial_f);
+        serial_size = tps_b->serialize_size();
+        char* serial_b = new char[serial_size];
+        tps_b->serialize(serial_b);
+
+        TPS* tps2_f = new TPS();
+        tps2_f->deserialize(serial_f);
+        TPS* tps2_b = new TPS();
+        tps2_b->deserialize(serial_b);
+
+        double ord2[2];
+        tps2_f->transform(160, 160, ord2);
+        double rev2[2];
+        tps2_b->transform(ord2[0], ord2[1], rev2);
+        //Same results with ord, rev
+        if (!(ord[0] == ord2[0] && ord[1] == ord2[1]))
+        {
+            // TODO:
+            printf("test_tilemapjp-3:failed\n");
+        }
+        if (!(rev[0] == rev2[0] && rev[1] == rev2[1]))
+        {
+            // TODO:
+            printf("test_tilemapjp-4:failed\n");
+        }
+
+        delete [] serial_f;
+        delete [] serial_b;
+    }
     return 0;
 }

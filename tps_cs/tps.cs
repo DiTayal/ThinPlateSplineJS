@@ -85,14 +85,28 @@ public class TPS
     // 
     // :param src_x: x value of the source point
     // :param src_y: y value of the source point
-    // :param dst: returns x and y values of the transformed point
-    public void transform(double src_x, double src_y, double[] dst)
+    // :returns: x and y values of the transformed point
+    public double[] transform(double src_x, double src_y)
     {
         if (!this._solved)
         {
             this.solve();
         }
+        double[] dst = new double[2];
         this._sp.get_point(src_x, src_y, dst);
+        return dst;
+    }
+
+    public byte[] serialize()
+    {
+        int serial_size = this._sp.serialize_size();
+        byte[] serial = new byte[serial_size];
+        return this._sp.serialize(serial);
+    }
+
+    public void deserialize(byte[] serial)
+    {
+        this._sp.deserialize(serial);
     }
 
     public static TPS from_control_points(double[][] points, bool backwards = false)

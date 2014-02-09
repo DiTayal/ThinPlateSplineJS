@@ -31,6 +31,7 @@
  ****************************************************************************/
 
 #include "thinplatespline.h"
+//#include <emscripten/bind.h>
 
 #ifdef HAVE_FLOAT_H
 #  include <float.h>
@@ -57,6 +58,96 @@ VizGeorefSpline2D* viz_llz2xy;
 #define VIZ_GEOREF_SPLINE_DEBUG 0
 
 int matrixInvert( int N, double input[], double output[] );
+
+VizGeorefSpline2D::VizGeorefSpline2D(int nof_vars){
+    x = y = u = NULL;
+    unused = index = NULL;
+    for( int i = 0; i < nof_vars; i++ )
+    {
+        rhs[i] = NULL;
+        coef[i] = NULL;
+    }
+          
+    _tx = _ty = 0.0;        
+    _ta = 10.0;
+    _nof_points = 0;
+    _nof_vars = nof_vars;
+    _max_nof_points = 0;
+    _AA = NULL;
+    _Ainv = NULL;
+    grow_points();
+    type = VIZ_GEOREF_SPLINE_ZERO_POINTS;
+}
+
+VizGeorefSpline2D::~VizGeorefSpline2D(){
+    if ( _AA )
+        free(_AA);
+    if ( _Ainv )
+        free(_Ainv);
+
+    free( x );
+    free( y );
+    free( u );
+    free( unused );
+    free( index );
+    for( int i = 0; i < _nof_vars; i++ )
+    {
+        free( rhs[i] );
+        free( coef[i] );
+    }
+}
+
+int VizGeorefSpline2D::get_nof_points(){
+    return _nof_points;
+}
+
+int VizGeorefSpline2D::get_object_size(){
+    return sizeof(VizGeorefSpline2D);
+}
+
+void VizGeorefSpline2D::set_toler( double tx, double ty ){
+    _tx = tx;
+    _ty = ty;
+}
+
+void VizGeorefSpline2D::get_toler( double& tx, double& ty) {
+    tx = _tx;
+    ty = _ty;
+}
+
+vizGeorefInterType VizGeorefSpline2D::get_interpolation_type ( ){
+    return type;
+}
+
+void VizGeorefSpline2D::dump_data_points()
+{
+    for ( int i = 0; i < _nof_points; i++ )
+    {
+        fprintf(stderr, "X = %f Y = %f Vars = ", x[i], y[i]);
+        for ( int v = 0; v < _nof_vars; v++ )
+            fprintf(stderr, "%f ", rhs[v][i+3]);
+        fprintf(stderr, "\n");
+    }
+}
+
+int VizGeorefSpline2D::delete_list()
+{
+    _nof_points = 0;
+    type = VIZ_GEOREF_SPLINE_ZERO_POINTS;
+    if ( _AA )
+    {
+        free(_AA);
+        _AA = NULL;
+    }
+    if ( _Ainv )
+    {
+        free(_Ainv);
+        _Ainv = NULL;
+    }
+    return _nof_points;
+}
+
+void VizGeorefSpline2D::reset(void) { _nof_points = 0; }
 
 void VizGeorefSpline2D::grow_points()
 
@@ -434,6 +525,183 @@ double VizGeorefSpline2D::base_func( const double x1, const double y1,
 	return dist * log( dist );
 }
 
+int VizGeorefSpline2D::serialize_size() 
+{
+    int  i_size     = sizeof(int);
+    int  v_size     = sizeof(vizGeorefInterType);
+    int  d_size     = sizeof(double);
+
+    int  alloc_size = i_size * 5 + v_size + d_size * 5;
+    int  p_num      = _max_nof_points + 3;
+    int  is_aa      = 0;
+    alloc_size      = alloc_size + ( i_size * 2 + d_size * ( 3 + VIZGEOREF_MAX_VARS * 2 ) ) * p_num;
+    int  a_num      = _nof_eqs * _nof_eqs;
+    if (_AA) {
+        alloc_size  = alloc_size + ( d_size * a_num * 2 );
+    }
+
+    return alloc_size;
+}
+
+char* VizGeorefSpline2D::serialize(char* serial) 
+{
+    int  i_size     = sizeof(int);
+    int  v_size     = sizeof(vizGeorefInterType);
+    int  d_size     = sizeof(double);
+    int  alloc_size = serialize_size();
+    int  p_num      = _max_nof_points + 3;
+    int  is_aa      = 0;
+    int  a_num      = _nof_eqs * _nof_eqs;
+    if (_AA) {
+        is_aa       = 1;
+    }
+
+    //cout << _nof_vars << endl;
+    //cout << _nof_points << endl;
+    //cout << _max_nof_points << endl;
+    //cout << _nof_eqs << endl;
+
+    char *work      = serial;
+    memcpy(work,              &_nof_vars,       i_size);
+    memcpy(work + i_size,     &_nof_points,     i_size);   
+    memcpy(work + i_size * 2, &_max_nof_points, i_size);
+    memcpy(work + i_size * 3, &_nof_eqs,        i_size);
+    memcpy(work + i_size * 4, &is_aa,           i_size);
+    work            = work + i_size * 5;
+    memcpy(work,              &type,            v_size);
+    work            = work + v_size;
+    memcpy(work,              &_tx,             d_size);
+    memcpy(work + d_size,     &_ty,             d_size);   
+    memcpy(work + d_size * 2, &_ta,             d_size);
+    memcpy(work + d_size * 3, &_dx,             d_size);
+    memcpy(work + d_size * 4, &_dy,             d_size);
+    work            = work + d_size * 5;    
+
+    for (int i=0;i<p_num;i++) {
+        memcpy(work,          &unused[i],       i_size);
+        memcpy(work + i_size, &index[i],        i_size);
+        work        = work + i_size * 2;
+
+        memcpy(work,              &x[i],        d_size);
+        memcpy(work + d_size,     &y[i],        d_size);
+        memcpy(work + d_size * 2, &u[i],        d_size);
+        work        = work + d_size * 3;
+        
+        for (int j=0;j<VIZGEOREF_MAX_VARS;j++) {
+            memcpy(work,          &rhs[j][i],   d_size);
+            memcpy(work + d_size, &coef[j][i],  d_size);
+            work        = work + d_size * 2; 
+        }
+    }
+
+    if (is_aa) {
+        for (int i=0;i<a_num;i++) {
+            memcpy(work,          &_AA[i],      d_size);
+            memcpy(work + d_size, &_Ainv[i],    d_size);
+            work        = work + d_size * 2; 
+        }
+    }
+
+    return work;
+}
+
+char* VizGeorefSpline2D::deserialize(char* serial) 
+{
+    int  i_size     = sizeof(int);
+    int  v_size     = sizeof(vizGeorefInterType);
+    int  d_size     = sizeof(double);
+    int  is_aa;
+
+    if ( _AA ) {
+        free(_AA);
+        _AA   = NULL;
+    }
+    if ( _Ainv ) {
+        free(_Ainv);
+        _Ainv = NULL;
+    }
+    free( x );
+    free( y );
+    free( u );
+    free( unused );
+    free( index );
+    for ( int i = 0; i < VIZGEOREF_MAX_VARS; i++ )
+    {
+        free( rhs[i] );
+        free( coef[i] );
+    }
+
+    char *work      = serial;
+    memcpy(&_nof_vars,       work,              i_size);
+    memcpy(&_nof_points,     work + i_size,     i_size);   
+    memcpy(&_max_nof_points, work + i_size * 2, i_size);
+    memcpy(&_nof_eqs,        work + i_size * 3, i_size);
+    memcpy(&is_aa,           work + i_size * 4, i_size);
+    work            = work + i_size * 5;
+    memcpy(&type,            work,              v_size);
+    work            = work + v_size;
+    memcpy(&_tx,             work,              d_size);
+    memcpy(&_ty,             work + d_size,     d_size);   
+    memcpy(&_ta,             work + d_size * 2, d_size);
+    memcpy(&_dx,             work + d_size * 3, d_size);
+    memcpy(&_dy,             work + d_size * 4, d_size);
+    work            = work + d_size * 5;
+
+    //cout << _nof_vars << endl;
+    //cout << _nof_points << endl;
+    //cout << _max_nof_points << endl;
+    //cout << _nof_eqs << endl;
+
+    int  alloc_size = i_size * 5 + v_size + d_size * 5;
+    int  p_num      = _max_nof_points + 3;
+    alloc_size      = alloc_size + ( i_size * 2 + d_size * ( 3 + VIZGEOREF_MAX_VARS * 2 ) ) * p_num;
+    int  a_num      = _nof_eqs * _nof_eqs;
+    if (is_aa) {
+        alloc_size  = alloc_size + ( d_size * a_num * 2 );
+    }
+
+    x      = (double *) malloc( d_size * p_num );
+    y      = (double *) malloc( d_size * p_num );
+    u      = (double *) malloc( d_size * p_num );
+    unused = (int *)    malloc( i_size * p_num );
+    index  = (int *)    malloc( i_size * p_num );
+    for ( int i = 0; i < VIZGEOREF_MAX_VARS; i++ )
+    {
+        rhs[i]  = (double *) calloc( d_size, p_num );
+        coef[i] = (double *) calloc( d_size, p_num );
+    }
+
+    for (int i=0;i<p_num;i++) {
+        memcpy(&unused[i],       work,          i_size);
+        memcpy(&index[i],        work + i_size, i_size);
+        work        = work + i_size * 2;
+
+        memcpy(&x[i],        work,              d_size);
+        memcpy(&y[i],        work + d_size,     d_size);
+        memcpy(&u[i],        work + d_size * 2, d_size);
+        work        = work + d_size * 3;
+        
+        for (int j=0;j<VIZGEOREF_MAX_VARS;j++) {
+            memcpy(&rhs[j][i],  work,          d_size);
+            memcpy(&coef[j][i], work + d_size, d_size);
+            work        = work + d_size * 2; 
+        }
+    }
+
+    if (is_aa) {
+        _AA      = (double *) malloc( d_size * a_num );
+        _Ainv    = (double *) malloc( d_size * a_num );
+
+        for (int i=0;i<a_num;i++) {
+            memcpy(&_AA[i],      work,          d_size);
+            memcpy(&_Ainv[i],    work + d_size, d_size);
+            work        = work + d_size * 2; 
+        }
+    }
+
+    return work;
+}
+
 int matrixInvert( int N, double input[], double output[] )
 {
     // Receives an array of dimension NxN as input.  This is passed as a one-
@@ -568,3 +836,15 @@ int matrixInvert( int N, double input[], double output[] )
     delete [] temp;       // free memory
     return true;
 }
+
+/*EMSCRIPTEN_BINDINGS(thinplatespline) {
+    emscripten::class_<VizGeorefSpline2D>("_TPS")
+        .constructor<int>()
+        .function("add_point", &VizGeorefSpline2D::add_point, emscripten::allow_raw_pointers())
+        .function("solve", &VizGeorefSpline2D::solve)
+        .function("get_point", &VizGeorefSpline2D::get_point, emscripten::allow_raw_pointers())
+        .function("serialize_size", &VizGeorefSpline2D::serialize_size)
+        .function("serialize", &VizGeorefSpline2D::serialize, emscripten::allow_raw_pointers())
+        .function("deserialize", &VizGeorefSpline2D::deserialize, emscripten::allow_raw_pointers())
+        ;
+}*/

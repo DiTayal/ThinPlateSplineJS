@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 #ifndef MAX
 #  define MIN(a,b)      ((a<b) ? a : b)
 #  define MAX(a,b)      ((a>b) ? a : b)
@@ -58,88 +59,16 @@ class VizGeorefSpline2D
 {
   public:
 
-    VizGeorefSpline2D(int nof_vars = 1){
-        x = y = u = NULL;
-        unused = index = NULL;
-        for( int i = 0; i < nof_vars; i++ )
-        {
-            rhs[i] = NULL;
-            coef[i] = NULL;
-        }
-          
-        _tx = _ty = 0.0;		
-        _ta = 10.0;
-        _nof_points = 0;
-        _nof_vars = nof_vars;
-        _max_nof_points = 0;
-        _AA = NULL;
-        _Ainv = NULL;
-        grow_points();
-        type = VIZ_GEOREF_SPLINE_ZERO_POINTS;
-    }
+    VizGeorefSpline2D(int nof_vars = 1);
+    ~VizGeorefSpline2D();
+    int get_nof_points();
+    static int get_object_size();
+    void set_toler( double tx, double ty );
+    void get_toler( double& tx, double& ty);
+    vizGeorefInterType get_interpolation_type ( );
 
-    ~VizGeorefSpline2D(){
-        if ( _AA )
-            free(_AA);
-        if ( _Ainv )
-            free(_Ainv);
-
-        free( x );
-        free( y );
-        free( u );
-        free( unused );
-        free( index );
-        for( int i = 0; i < _nof_vars; i++ )
-        {
-            free( rhs[i] );
-            free( coef[i] );
-        }
-    }
-
-    int get_nof_points(){
-        return _nof_points;
-    }
-
-    void set_toler( double tx, double ty ){
-        _tx = tx;
-        _ty = ty;
-    }
-
-    void get_toler( double& tx, double& ty) {
-        tx = _tx;
-        ty = _ty;
-    }
-
-    vizGeorefInterType get_interpolation_type ( ){
-        return type;
-    }
-
-    void dump_data_points()
-	{
-            for ( int i = 0; i < _nof_points; i++ )
-            {
-                fprintf(stderr, "X = %f Y = %f Vars = ", x[i], y[i]);
-                for ( int v = 0; v < _nof_vars; v++ )
-                    fprintf(stderr, "%f ", rhs[v][i+3]);
-                fprintf(stderr, "\n");
-            }
-	}
-    int delete_list()
-	{
-            _nof_points = 0;
-            type = VIZ_GEOREF_SPLINE_ZERO_POINTS;
-            if ( _AA )
-            {
-                free(_AA);
-                _AA = NULL;
-            }
-            if ( _Ainv )
-            {
-                free(_Ainv);
-                _Ainv = NULL;
-            }
-            return _nof_points;
-	}
+    void dump_data_points();
+    int delete_list();
 
     void grow_points();
     int add_point( const double Px, const double Py, const double *Pvars );
@@ -147,8 +76,12 @@ class VizGeorefSpline2D
     int get_point( const double Px, const double Py, double *Pvars );
     bool get_xy(int index, double& x, double& y);
     bool change_point(int index, double x, double y, double* Pvars);
-    void reset(void) { _nof_points = 0; }
+    void reset(void);
     int solve(void);
+
+    int serialize_size();
+    char* serialize(char* serial);
+    char* deserialize(char* serial);
 
   private:	
     double base_func( const double x1, const double y1,
@@ -179,5 +112,4 @@ class VizGeorefSpline2D
 	
     double *_AA, *_Ainv;
 };
-
 

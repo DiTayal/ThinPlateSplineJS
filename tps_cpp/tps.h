@@ -99,6 +99,21 @@ public:
         this->_sp->get_point(src_x, src_y, dst);
     }
 
+    int serialize_size()
+    {
+        return this->_sp->serialize_size();
+    }
+
+    char* serialize(char* serial)
+    {
+        return this->_sp->serialize(serial);
+    }
+
+    char* deserialize(char* serial)
+    {
+        return this->_sp->deserialize(serial);
+    }
+
     static TPS* from_control_points(double* points, int count, bool backwards = false)
     {
         TPS* t = new TPS();
